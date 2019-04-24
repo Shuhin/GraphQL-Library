@@ -12,9 +12,19 @@ let Mongoose = require('mongoose')
 
 let app = express();
 
-const schema = require('./schema.js')
+//const schema = require('./schema.js')
 
 const graphqlHTTP = require('express-graphql');
+
+const{
+  GraphQLObjectType,
+  GraphQLString,
+  GraphQLID,
+  GraphQLSchema,
+  GraphQLList,
+  GraphQLNonNull
+} = require('graphql');
+
 
 const port = process.env.PORT || 3000;
 
@@ -25,13 +35,25 @@ Mongoose.connect("mongodb://localhost/books", (err, db) => {
   }
   console.log('Connected');
 });
-
+ 
 const bookSchema = Mongoose.model("bookList", {
   title: String,
   author: String,
   publisher: String,
   photo_path: String
 });
+
+const bookType = new GraphQLObjectType({
+  name: 'Books',
+  fields:() => ({
+      id:{ type:GraphQLID },
+      title: { type: GraphQLString },
+      author: { type: GraphQLString },
+      publisher: { type: GraphQLString },
+      photo_path: { type: GraphQLString }
+  })
+});
+
 
 const storage = multer.diskStorage({
   destination: './public/uploads',
@@ -88,11 +110,34 @@ app.use(function check(error, req, res, next) {
   next();
 });
 
-app.use('.grapql', graphqlHTTP({
-  schema: graphqlSchema,
-  rootValue: graphqlResolver,
+const schema = new GraphQLSchema({
+  query: new GraphQLObjectType({
+  name: 'RootQueryType',
+  fields:{
+      book:{
+          type:bookType,
+          args:{
+              id :{ type: GraphQLNonNull(GraphQLID)}
+          },
+          resolve( root,args, context, info ){
+               return bookSchema.findById(args.id).exec();
+               }
+     },
+     books:{
+         type: new GraphQLList(bookType),
+         resolve( root,args, context, info){
+             return  bookSchema.find({}).exec();
+         }
+     }
+  }
+})
+});
+
+app.use('/graphql', graphqlHTTP({
+  schema: schema,
+  rootValue: root,
   graphiql: true,
-  fromatError(err) {
+  formatError(err) {
     if(!err.originalError){
       return err;
     }
@@ -177,4 +222,7 @@ app.post('/upload', function(req, res, next) {
   });
 });
 
-app.listen(port);
+
+app.listen(port,()=>{
+  console.log(`Server is running on port ${port}`)
+});
